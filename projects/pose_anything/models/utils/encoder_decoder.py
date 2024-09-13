@@ -130,8 +130,8 @@ class EncoderDecoder(nn.Module):
                  nhead=8,
                  num_encoder_layers=3,
                  num_decoder_layers=3,
-                 graph_decoder=None,
-                 dim_feedforward=2048,
+                 graph_decoder=None,  # graph_decoder='pre'
+                 dim_feedforward=2048, # dim_feedforward=1024
                  dropout=0.1,
                  activation='relu',
                  normalize_before=False,
@@ -559,7 +559,7 @@ class TransformerEncoderLayer(nn.Module):
         src = self.norm2(src)
         return src
 
-
+# 根据关键点数量和骨架创建邻接矩阵
 def adj_from_skeleton(num_pts, skeleton, mask, device='cuda'):
     adj_mx = torch.empty(0, device=device)
     batch_size = len(skeleton)

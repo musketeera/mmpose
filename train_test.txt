@@ -1,0 +1,3 @@
+# 训练和测试命令
+
+python tools/train.py my_configs_script/hrnet-speedplus.py
