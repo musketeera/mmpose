@@ -187,7 +187,9 @@ class PoseHead(nn.Module):
 
         Args:
             x (Tensor): Input feature from backbone's single stage, shape
-                [bs, c, h, w].
+                [bs, c, h, w]. [bs, 1024, 7, 7]
+
+            target_s (Tensor): 多个关键点的热图，shape [bs, num_keypoints, h, w]
 
         Returns:
             all_cls_scores (Tensor): Outputs from the classification head,
@@ -202,17 +204,18 @@ class PoseHead(nn.Module):
         # ignored positions, while zero values means valid positions.
 
         # process query image feature
-        x = self.input_proj(x)
+        x = self.input_proj(x)  # [bs, 256, 7, 7]
         bs, dim, h, w = x.shape
 
         # Disable the support keypoint positional embedding
+        # [bs, 256, 1, nq]  [False, False, False, ...]
         support_order_embedding = x.new_zeros(
             (bs, self.embed_dims, 1, target_s[0].shape[1])).to(torch.bool)
 
         # Feature map pos embedding
         masks = x.new_zeros(
-            (x.shape[0], x.shape[2], x.shape[3])).to(torch.bool)
-        pos_embed = self.positional_encoding(masks)
+            (x.shape[0], x.shape[2], x.shape[3])).to(torch.bool)  # [bs, 7, 7]
+        pos_embed = self.positional_encoding(masks)  # [bs, 256, 7, 7]
 
         # process keypoint token feature
         query_embed_list = []
@@ -252,6 +255,7 @@ class PoseHead(nn.Module):
                 out_points[idx])
             output_kpts.append(layer_outputs_unsig.sigmoid())
 
+        # [L, B, K, 2]   [B, K, 2]   [B, K, H, W]
         return torch.stack(
             output_kpts, dim=0), initial_proposals, similarity_map
 
