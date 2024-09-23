@@ -33,7 +33,7 @@ class MLP(nn.Module):
 
 
 class ProposalGenerator(nn.Module):
-
+    # (256, 256, 128)
     def __init__(self, hidden_dim, proj_dim, dynamic_proj_dim):
         super().__init__()
         self.support_proj = nn.Linear(hidden_dim, proj_dim)
@@ -58,7 +58,7 @@ class ProposalGenerator(nn.Module):
 
         query_feat = query_feat.transpose(0, 1)
         support_feat = support_feat.transpose(0, 1)
-        nq = support_feat.shape[1]
+        nq = support_feat.shape[1]  # 查询数量query
 
         fs_proj = self.support_proj(support_feat)  # [bs, query, c]
         fq_proj = self.query_proj(query_feat)  # [bs, hw, c]
@@ -119,6 +119,7 @@ class ProposalGenerator(nn.Module):
         # sum the mulplication to obtain the final coord proposals
         proposals = proposals.sum(dim=2) / side_normalizer  # [bs, nq, 2]
 
+        # [bs, query, 2] [bs, nq, h, w] [bs, nq, 2]
         return proposal_for_loss, similarity, proposals
 
 
@@ -190,15 +191,16 @@ class EncoderDecoder(nn.Module):
                 skeleton,
                 return_attn_map=False):
 
-        bs, c, h, w = src.shape
+        bs, c, h, w = src.shape     # (B, 1024, 7, 7)
 
-        src = src.flatten(2).permute(2, 0, 1)
-        pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        support_order_embed = support_order_embed.flatten(2).permute(2, 0, 1)
-        pos_embed = torch.cat((pos_embed, support_order_embed))
-        query_embed = support_embed.transpose(0, 1)
+        src = src.flatten(2).permute(2, 0, 1)  # (49, B, 1024)
+        pos_embed = pos_embed.flatten(2).permute(2, 0, 1) # (49, B, 1024)
+        support_order_embed = support_order_embed.flatten(2).permute(2, 0, 1) # (49, B, 1024)
+        pos_embed = torch.cat((pos_embed, support_order_embed)) # (98, B, 1024)
+        query_embed = support_embed.transpose(0, 1) # (B, 49, 1024)
         mask = mask.flatten(1)
 
+        # (49, B, 1024) (49, B, 1024)
         query_embed, refined_support_embed = self.encoder(
             src,
             query_embed,
@@ -213,6 +215,7 @@ class EncoderDecoder(nn.Module):
         initial_position_embedding = position_embedding.forward_coordinates(
             initial_proposals)
 
+        # [1, 15, B, 256] 列表包含四个元素[B, 15, 2] 列表包含3个元素[B, 15, 49]
         outs_dec, out_points, attn_maps = self.decoder(
             refined_support_embed,
             query_embed,
@@ -226,6 +229,7 @@ class EncoderDecoder(nn.Module):
             skeleton=skeleton,
             return_attn_map=return_attn_map)
 
+        # [1, B, 15, 256] [B, 15, 2] 列表包含四个元素[B, 15, 2] [B, 15, 7, 7]
         return outs_dec.transpose(
             1, 2), initial_proposals_for_loss, out_points, similarity_map
 
@@ -294,6 +298,7 @@ class GraphTransformerDecoder(nn.Module):
             if self.detach_support_feat:
                 refined_support_feat = refined_support_feat.detach()
 
+            # [15, B, 256]  [B, 15, 49]
             refined_support_feat, attn_map = layer(
                 refined_support_feat,
                 query_feat,
@@ -335,6 +340,7 @@ class GraphTransformerDecoder(nn.Module):
         if self.return_intermediate:
             return torch.stack(intermediate), query_points, attn_maps
 
+        # [1, 15, B, 256] 列表包含四个元素[B, 15, 2] 列表包含3个元素[B, 15, 49]
         return refined_support_feat.unsqueeze(0), query_points, attn_maps
 
     def update(self, query_coordinates, delta_unsig):
@@ -458,6 +464,7 @@ class GraphTransformerDecoderLayer(nn.Module):
         refined_support_feat = refined_support_feat + self.dropout3(tgt2)
         refined_support_feat = self.norm3(refined_support_feat)
 
+        # [nq, bs, d_model]  [bs, nq, hw]
         return refined_support_feat, attn_map
 
 
@@ -506,7 +513,7 @@ class TransformerEncoder(nn.Module):
         refined_query = output[n:, :, :]  # [nq, bs, c]
         output = output[:n, :, :]  # [n, bs, c]
 
-        return output, refined_query
+        return output, refined_query # [hw, bs, c] [num_query, bs, c]
 
 
 class TransformerEncoderLayer(nn.Module):
