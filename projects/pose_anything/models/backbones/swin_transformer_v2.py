@@ -103,10 +103,15 @@ class WindowAttention(nn.Module):
         self.pretrained_window_size = pretrained_window_size
         self.num_heads = num_heads
 
+        # 这个参数在注意力机制中起到缩放作用。
+        # 初始值被设置为log(10)≈2.3，这意味着初始缩放因子为exp(2.3)≈10。
+        # 在训练过程中，这个参数可以被优化以找到最佳的缩放值
         self.logit_scale = nn.Parameter(
             torch.log(10 * torch.ones((num_heads, 1, 1))), requires_grad=True)
 
         # mlp to generate continuous relative position bias
+        # 定义了一个多层感知器（MLP），用于生成连续的相对位置偏置
+        # 这个MLP的作用是将二维相对位置信息转换为每个注意力头的连续偏置值。
         self.cpb_mlp = nn.Sequential(
             nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True),
             nn.Linear(512, num_heads, bias=False))
@@ -129,6 +134,7 @@ class WindowAttention(nn.Module):
             relative_coords_table[:, :, :, 1] /= (
                 pretrained_window_size[1] - 1)
         else:
+            # 相对坐标归一化
             relative_coords_table[:, :, :, 0] /= (self.window_size[0] - 1)
             relative_coords_table[:, :, :, 1] /= (self.window_size[1] - 1)
         relative_coords_table *= 8  # normalize to -8, 8
@@ -143,6 +149,7 @@ class WindowAttention(nn.Module):
         coords_w = torch.arange(self.window_size[1])
         coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        # None起到扩展维度作用
         relative_coords = coords_flatten[:, :,
                                          None] - coords_flatten[:, None, :]  #
         # 2, Wh*Ww, Wh*Ww
@@ -343,6 +350,7 @@ class SwinTransformerBlock(nn.Module):
         x = x.view(B, H, W, C)
 
         # cyclic shift
+        # 循环位移，向上和向左移动
         if self.shift_size > 0:
             shifted_x = torch.roll(
                 x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
@@ -470,11 +478,11 @@ class BasicLayer(nn.Module):
     """
 
     def __init__(self,
-                 dim,
-                 input_resolution,
-                 depth,
-                 num_heads,
-                 window_size,
+                 dim,              # 128
+                 input_resolution, # (56, 56)
+                 depth,            # 2
+                 num_heads,        # 4
+                 window_size,      # 14
                  mlp_ratio=4.,
                  qkv_bias=True,
                  drop=0.,
@@ -483,7 +491,7 @@ class BasicLayer(nn.Module):
                  norm_layer=nn.LayerNorm,
                  downsample=None,
                  use_checkpoint=False,
-                 pretrained_window_size=0):
+                 pretrained_window_size=0):  # 12
 
         super().__init__()
         self.dim = dim
@@ -566,12 +574,14 @@ class PatchEmbed(nn.Module):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
+        # [56, 56]
         patches_resolution = [
             img_size[0] // patch_size[0], img_size[1] // patch_size[1]
         ]
         self.img_size = img_size
         self.patch_size = patch_size
         self.patches_resolution = patches_resolution
+        # 56 * 56 = 3136
         self.num_patches = patches_resolution[0] * patches_resolution[1]
 
         self.in_chans = in_chans
@@ -590,10 +600,10 @@ class PatchEmbed(nn.Module):
         assert H == self.img_size[0] and W == self.img_size[1], \
             (f"Input image size ({H}*{W}) doesn't match model "
              f'({self.img_size[0]}*{self.img_size[1]}).')
-        x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
+        x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C (1, 3136, 3)
         if self.norm is not None:
             x = self.norm(x)
-        return x
+        return x   # (1, 3136, 3)
 
     def flops(self):
         Ho, Wo = self.patches_resolution
@@ -669,9 +679,9 @@ class SwinTransformerV2(nn.Module):
             in_chans=in_chans,
             embed_dim=embed_dim,
             norm_layer=norm_layer if self.patch_norm else None)
-        num_patches = self.patch_embed.num_patches
+        num_patches = self.patch_embed.num_patches # 3136
         patches_resolution = self.patch_embed.patches_resolution
-        self.patches_resolution = patches_resolution
+        self.patches_resolution = patches_resolution # [52, 52]
 
         # absolute position embedding
         if self.ape:
@@ -688,14 +698,15 @@ class SwinTransformerV2(nn.Module):
 
         # build layers
         self.layers = nn.ModuleList()
-        for i_layer in range(self.num_layers):
+        for i_layer in range(self.num_layers):  # 4
             layer = BasicLayer(
-                dim=int(embed_dim * 2**i_layer),
+                dim=int(embed_dim * 2**i_layer), # 128
+                # (56, 56)
                 input_resolution=(patches_resolution[0] // (2**i_layer),
                                   patches_resolution[1] // (2**i_layer)),
-                depth=depths[i_layer],
-                num_heads=num_heads[i_layer],
-                window_size=window_size,
+                depth=depths[i_layer], # 2
+                num_heads=num_heads[i_layer], # 4
+                window_size=window_size, #14
                 mlp_ratio=self.mlp_ratio,
                 qkv_bias=qkv_bias,
                 drop=drop_rate,
@@ -777,11 +788,11 @@ class SwinTransformerV2(nn.Module):
         return {'cpb_mlp', 'logit_scale', 'relative_position_bias_table'}
 
     def forward_features(self, x):
-        B, C, H, W = x.shape
-        x = self.patch_embed(x)
+        B, C, H, W = x.shape  # (1, 3, 224, 224)
+        x = self.patch_embed(x)  # (1, 3136, 3)
         if self.ape:
             x = x + self.absolute_pos_embed
-        x = self.pos_drop(x)
+        x = self.pos_drop(x)  # (1, 3136, 3)
 
         if self.multi_scale:
             # x_2d = x.view(B, H // 4, W // 4, -1).permute(0, 3, 1, 2)  # B C
