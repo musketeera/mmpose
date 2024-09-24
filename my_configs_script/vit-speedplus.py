@@ -94,7 +94,6 @@ codec = dict(
     normalize=False,
     use_dark=False)
 
-# 模型：HRNet
 model = dict(
     type='TopdownPoseEstimator',
     data_preprocessor=dict(

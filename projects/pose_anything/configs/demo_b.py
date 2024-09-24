@@ -155,7 +155,7 @@ valid_pipeline = [
 
 test_pipeline = valid_pipeline
 
-data_root = 'data/mp100'
+data_root = '/mnt/e/anything_pose/data'
 data = dict(
     samples_per_gpu=8,
     workers_per_gpu=8,

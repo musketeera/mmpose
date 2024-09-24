@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import Conv2d, Linear
 from mmengine.model import xavier_init
-from models.utils import build_positional_encoding, build_transformer
+from .utils import build_positional_encoding, build_transformer
 
 # from mmcv.cnn.bricks.transformer import build_positional_encoding
 from mmpose.evaluation import keypoint_pck_accuracy

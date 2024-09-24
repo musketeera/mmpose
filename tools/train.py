@@ -140,7 +140,7 @@ def merge_args(cfg, args):
 def main():
     args = parse_args()
 
-    # load config
+    # load config 从配置文件my_config读取信息
     cfg = Config.fromfile(args.config)
 
     # merge CLI arguments to config
